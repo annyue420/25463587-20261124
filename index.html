@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>Cuezy ポン出し</title>
+<meta name="theme-color" content="#121214">
+<meta name="apple-mobile-web-app-title" content="Cuezy">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<script src="libs/jszip.min.js"></script>
+<style>
+* {
+box-sizing: border-box;
+user-select: none;
+-webkit-user-select: none;
+-webkit-tap-highlight-color: transparent;
+}
+body {
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+background-color: #121214;
+color: #e2e8f0;
+margin: 0;
+padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) 8px;
+display: flex;
+flex-direction: column;
+align-items: center;
+height: 100vh;
+height: -webkit-fill-available;
+overflow: hidden; /* 本番での誤スクロールを完全に防止 */
+}
+header {
+text-align: center;
+margin-bottom: 4px;
+flex: none;
+}
+h1 {
+margin: 0;
+font-size: 16px;
+color: #00adb5;
+letter-spacing: 0.5px;
+}
+.subtitle {
+font-size: 9px;
+color: #718096;
+margin: 0;
+}
+/* プログレスバー */
+.progress-container {
+width: 100%;
+max-width: 900px;
+background: #1a1a1e;
+border: 1px solid #2d3748;
+border-radius: 6px;
+padding: 8px;
+margin-bottom: 6px;
+display: none;
+flex: none;
+}
+.progress-header {
+display: flex;
+justify-content: space-between;
+font-size: 10px;
+margin-bottom: 4px;
+color: #a0aec0;
+}
+.progress-bar-bg {
+width: 100%;
+height: 6px;
+background: #2d3748;
+border-radius: 3px;
+overflow: hidden;
+}
+.progress-bar-fill {
+width: 0%;
+height: 100%;
+background: #00adb5;
+transition: width 0.1s ease;
+}
+.progress-container.error .progress-bar-fill {
+background: #e53e3e;
+}
+
+/* コントロールパネル */
+.global-controls {
+background-color: #1a1a1e;
+border: 1px solid #2d3748;
+border-radius: 8px;
+padding: 4px 6px;
+margin-bottom: 6px;
+display: flex;
+gap: 6px;
+align-items: center;
+font-size: 11px;
+flex-wrap: wrap;
+justify-content: center;
+width: 100%;
+max-width: 900px;
+flex: none;
+}
+.control-group {
+display: flex;
+align-items: center;
+gap: 4px;
+}
+.page-btn-container {
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 3px;
+background: rgba(0,0,0,0.2);
+padding: 4px 6px;
+border-radius: 6px;
+border: 1px solid #2d3748;
+}
+.page-row {
+display: flex;
+gap: 3px;
+}
+.page-btn {
+background-color: #2d3748;
+color: white;
+border: 1px solid #4a5568;
+padding: 3px 8px;
+border-radius: 4px;
+cursor: pointer;
+font-weight: bold;
+font-size: 11px;
+}
+.page-btn.active {
+background-color: #00adb5;
+border-color: #fff;
+color: #121214;
+}
+.page-title-input {
+width: 120px;
+background: rgba(0, 0, 0, 0.4);
+border: 1px solid #4a5568;
+border-radius: 3px;
+color: #00adb5;
+font-size: 10px;
+text-align: center;
+padding: 1px 2px;
+font-weight: bold;
+}
+body:not(.is-editing) .page-title-input {
+pointer-events: none;
+border: none;
+background: transparent;
+color: #a0aec0;
+}
+.btn-lock {
+background-color: #2f855a;
+color: white;
+border: none;
+padding: 6px 10px;
+border-radius: 4px;
+font-weight: bold;
+font-size: 11px;
+}
+.btn-lock.editing {
+background-color: #dd6b20;
+}
+.btn-backup {
+background-color: #2b6cb0;
+color: white;
+border: none;
+padding: 4px 8px;
+border-radius: 4px;
+font-weight: bold;
+font-size: 10px;
+}
+.btn-danger {
+background-color: #e53e3e;
+color: white;
+border: none;
+padding: 5px 10px;
+border-radius: 4px;
+font-weight: bold;
+font-size: 11px;
+letter-spacing: 0.5px;
+}
+.status-msg {
+font-size: 10px;
+color: #38a169;
+}
+/* ─── グリッドシステム（詳細は末尾の汎用レイアウトCSS） ─── */
+.grid {
+display: grid;
+gap: 6px;
+width: 100%;
+max-width: 1200px;
+flex: 1;
+min-height: 0;
+}
+
+/* パッド様式 */
+.pad {
+position: relative;
+width: 100%;
+height: 100%;
+background-color: #22252c;
+border: 2px solid #3f444e;
+border-radius: 6px;
+display: flex;
+flex-direction: column;
+justify-content: space-between;
+cursor: pointer;
+transition: transform 0.05s ease, background-color 0.1s ease;
+box-shadow: 0 3px 5px rgba(0,0,0,0.2);
+min-height: 0;
+}
+.pad:active {
+transform: scale(0.98);
+}
+.pad.has-sound {
+border-color: #00adb5;
+background-color: #1b2a32;
+}
+.pad.playing {
+background-color: #00adb5 !important;
+border-color: #fff;
+box-shadow: 0 0 12px rgba(0, 173, 181, 0.6);
+}
+.pad.playing .pad-name, .pad.playing .mode-badge, .pad.playing .pad-desc-textarea {
+color: #121214 !important;
+}
+.pad-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+width: 100%;
+}
+.pad-num {
+font-size: 9px;
+font-weight: bold;
+color: #4a5568;
+}
+.pad.has-sound .pad-num {
+color: #00adb5;
+}
+.playing .pad-num {
+color: #121214;
+}
+.mode-badge {
+font-size: 8px;
+background: rgba(255,255,255,0.1);
+padding: 1px 2px;
+border-radius: 2px;
+color: #a0aec0;
+}
+.pad-desc-textarea {
+width: 100%;
+background: rgba(0, 0, 0, 0.2);
+border: 1px dashed #4a5568;
+border-radius: 4px;
+color: #cbd5e0;
+text-align: center;
+resize: none;
+overflow: hidden;
+font-family: inherit;
+}
+body:not(.is-editing) .pad-desc-textarea {
+pointer-events: none;
+border: none;
+background: transparent;
+}
+.pad-desc-textarea:focus {
+outline: none;
+border-color: #00adb5;
+}
+.pad-name {
+text-align: center;
+word-break: break-all;
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+color: #636e72;
+}
+.pad.has-sound .pad-name {
+color: #cbd5e0;
+}
+.file-control-group {
+display: flex;
+gap: 3px;
+width: 100%;
+margin-top: auto;
+}
+.file-label {
+flex: 1;
+background-color: #2d3748;
+color: #cbd5e0;
+text-align: center;
+border-radius: 3px;
+cursor: pointer;
+}
+.pad-delete-btn {
+background-color: #742a2a;
+color: #feb2b2;
+border: none;
+font-size: 8px;
+padding: 3px 5px;
+border-radius: 3px;
+cursor: pointer;
+font-weight: bold;
+display: none;
+}
+.file-input { display: none; }
+.pad-fade-settings {
+display: flex;
+gap: 2px;
+width: 100%;
+font-size: 8px;
+margin-top: 2px;
+background: rgba(0,0,0,0.2);
+padding: 2px;
+border-radius: 3px;
+}
+.fade-select-group {
+flex: 1;
+display: flex;
+align-items: center;
+gap: 1px;
+color: #a0aec0;
+}
+.fade-select-group select {
+width: 100%;
+background: #2d3748;
+color: #fff;
+border: none;
+font-size: 8px;
+padding: 0;
+border-radius: 2px;
+}
+.pad-settings {
+display: flex;
+gap: 2px;
+width: 100%;
+margin-top: 3px;
+}
+.pad.playing .pad-settings, .pad.playing .pad-fade-settings, .pad.playing .file-control-group {
+display: none !important;
+}
+.setting-btn {
+flex: 1;
+background: #2d3748;
+color: #fff;
+border: none;
+border-radius: 2px;
+cursor: pointer;
+}
+.setting-btn.active {
+background: #319795;
+}
+body:not(.is-editing) .edit-only {
+display: none !important;
+}
+
+/* ═══════════ 汎用・1画面フィット（--k = 画面サイズに応じた倍率。JSが自動設定） ═══════════ */
+:root { --k: 1; }
+html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+body {
+height: 100vh;
+height: 100dvh;
+padding-top: calc(env(safe-area-inset-top) + 5px * var(--k));
+padding-bottom: calc(env(safe-area-inset-bottom) + 5px * var(--k));
+padding-left: calc(env(safe-area-inset-left) + 5px * var(--k));
+padding-right: calc(env(safe-area-inset-right) + 5px * var(--k));
+touch-action: manipulation;
+}
+header { display: none; }
+.progress-container { padding: calc(6px * var(--k)); margin-bottom: calc(4px * var(--k)); }
+.progress-header { font-size: calc(10px * var(--k)); }
+.global-controls {
+max-width: none;
+padding: calc(4px * var(--k));
+gap: calc(5px * var(--k));
+margin-bottom: calc(5px * var(--k));
+font-size: calc(11px * var(--k));
+}
+.btn-lock { flex: 1 1 auto; padding: calc(9px * var(--k)) calc(8px * var(--k)); font-size: calc(12px * var(--k)); }
+.btn-danger { padding: calc(9px * var(--k)) calc(12px * var(--k)); font-size: calc(12px * var(--k)); }
+.btn-backup { padding: calc(8px * var(--k)) calc(10px * var(--k)); font-size: calc(11px * var(--k)); }
+.global-controls select { font-size: calc(11px * var(--k)); }
+.status-msg { font-size: calc(9px * var(--k)); }
+.page-btn-container { flex: 1 1 auto; flex-direction: row; align-items: center; gap: calc(6px * var(--k)); padding: calc(3px * var(--k)) calc(4px * var(--k)); }
+.page-row { flex: 1; gap: calc(3px * var(--k)); }
+.page-btn { flex: 1; padding: calc(8px * var(--k)) 0; font-size: calc(14px * var(--k)); border-radius: calc(5px * var(--k)); }
+.page-title-input { width: calc(84px * var(--k)); font-size: calc(10.5px * var(--k)); }
+
+/* 本番モード: 縦=3列×4段 / 横=6列×2段 で必ず1画面に収める */
+.grid { gap: calc(5px * var(--k)); max-width: none; overflow: hidden; }
+@media (orientation: portrait) {
+.grid { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, minmax(0, 1fr)); }
+}
+@media (orientation: landscape) {
+.grid { grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.page-btn-container { flex: 0 1 auto; }
+}
+.pad { padding: calc(5px * var(--k)) !important; border-width: calc(1.5px * var(--k)); border-radius: calc(6px * var(--k)); min-height: 0; overflow: hidden; }
+.pad-num { font-size: calc(10px * var(--k)); }
+.mode-badge { font-size: calc(8px * var(--k)); }
+.pad-name { font-size: calc(10px * var(--k)); min-height: 0; margin: calc(2px * var(--k)) 0; line-height: 1.2; }
+.pad-desc-textarea { margin: calc(2px * var(--k)) 0; padding: 1px; line-height: 1.25; }
+.pad-header select.setting-btn { width: calc(46px * var(--k)) !important; font-size: calc(10px * var(--k)) !important; }
+
+/* 編集モード: スクロールして全設定項目を操作可能に（縦=2列 / 横=3列） */
+body.is-editing .grid {
+grid-template-rows: none;
+grid-auto-rows: minmax(calc(190px * var(--k)), auto);
+align-content: start;
+overflow-y: auto;
+-webkit-overflow-scrolling: touch;
+padding-bottom: calc(8px * var(--k));
+}
+@media (orientation: portrait) { body.is-editing .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (orientation: landscape) { body.is-editing .grid { grid-template-columns: repeat(3, 1fr); } }
+body.is-editing .pad { min-height: calc(190px * var(--k)); }
+body.is-editing .setting-btn,
+body.is-editing .file-label { padding: calc(6px * var(--k)) 0; font-size: calc(11px * var(--k)); text-align: center; }
+body.is-editing .pad-fade-settings { font-size: calc(10px * var(--k)); padding: calc(3px * var(--k)); }
+body.is-editing .fade-select-group select { font-size: calc(11px * var(--k)); padding: calc(2px * var(--k)) 0; }
+body.is-editing .pad-delete-btn { font-size: calc(11px * var(--k)); padding: calc(6px * var(--k)) calc(9px * var(--k)); }
+
+/* パッドロック（誤タッチ防止） */
+.pad.is-stream .pad-num::after { content: " ≋"; opacity: 0.7; }
+.pad.is-pinned .pad-num::before { content: "⚡"; color: #f6e05e; }
+.pad-pin-btn { background-color: #2d3748; color: #718096; border: none; font-size: 8px; padding: 3px 5px; border-radius: 3px; cursor: pointer; font-weight: bold; }
+.pad-pin-btn.on { background-color: #744210; color: #faf089; }
+body.is-editing .pad-pin-btn { font-size: calc(11px * var(--k)); padding: calc(6px * var(--k)) calc(9px * var(--k)); }
+.btn-padlock { background-color: #4a5568; min-width: calc(88px * var(--k)); }
+.btn-padlock.locked { background-color: #e53e3e; }
+body.pad-locked:not(.is-editing) .pad { pointer-events: none; }
+body.pad-locked:not(.is-editing) .pad:not(.playing) { opacity: 0.45; }
+</style>
+</head>
+<body>
+
+<header>
+<h1>Web ポン出し App Pro</h1>
+<p class="subtitle">12PAD×5PAGE / iOS AAC＆読込インジケーター完全対応</p>
+</header>
+
+<div class="progress-container" id="progress-area">
+<div class="progress-header">
+<span id="progress-title">処理中...</span>
+<span id="progress-text">0 / 0 件 (0%)</span>
+</div>
+<div class="progress-bar-bg">
+<div class="progress-bar-fill" id="progress-bar"></div>
+</div>
+<button class="btn-backup" id="progress-action" style="display:none; width:100%; margin-top:8px;"></button>
+</div>
+
+<div class="global-controls">
+<button class="btn-lock" id="lock-toggle-btn" onclick="toggleEditMode()">▶ 本番モード</button>
+
+<div class="page-btn-container">
+<div class="page-row">
+<button class="page-btn active" id="p-btn-1" onclick="switchPage(1)">1</button>
+<button class="page-btn" id="p-btn-2" onclick="switchPage(2)">2</button>
+<button class="page-btn" id="p-btn-3" onclick="switchPage(3)">3</button>
+<button class="page-btn" id="p-btn-4" onclick="switchPage(4)">4</button>
+<button class="page-btn" id="p-btn-5" onclick="switchPage(5)">5</button>
+</div>
+<input type="text" class="page-title-input" id="page-title-display" oninput="savePageTitle(this.value)" placeholder="シーン名">
+</div>
+<div class="control-group edit-only">
+<select id="global-font-size" onchange="changeAllFontSizes(this.value)">
+<option value="10px">極小文字</option>
+<option value="12px" selected>標準文字</option>
+<option value="15px">中文字</option>
+</select>
+</div>
+
+<div class="control-group edit-only">
+<select id="budget-select" onchange="changeBudget(this.value)" title="長い曲を『押した瞬間に鳴る状態』にするために使うメモリの上限">
+<option value="auto">即応:自動</option>
+<option value="0">即応:なし</option>
+<option value="150">即応:150MB</option>
+<option value="400">即応:400MB</option>
+<option value="900">即応:900MB</option>
+</select>
+</div>
+
+<div class="control-group edit-only">
+<select id="backup-scope" class="btn-backup" title="書出する範囲">
+<option value="all">全ページ</option>
+<option value="1">ページ1</option>
+<option value="2">ページ2</option>
+<option value="3">ページ3</option>
+<option value="4">ページ4</option>
+<option value="5">ページ5</option>
+</select>
+<button class="btn-backup" onclick="exportBackupZip()">書出</button>
+<button class="btn-backup" onclick="document.getElementById('import-file').click()">読込</button>
+<input type="file" id="import-file" accept=".zip,application/zip" style="display:none" onchange="importBackupFile(event)">
+</div>
+
+<button class="btn-danger btn-padlock" id="pad-lock-btn" onclick="togglePadLock()">🔓 ロック</button>
+<span class="status-msg" id="db-status">DB接続中...</span>
+</div>
+
+<div class="grid" id="pad-grid"></div>
+
+<script>
+// ─── JavaScript ロジックコア ───
+const PAD_COUNT = 12;
+
+// ─── 画面サイズ自動フィット ───
+function updateScale() {
+const vv = window.visualViewport;
+const w = vv ? vv.width : window.innerWidth;
+const h = vv ? vv.height : window.innerHeight;
+const portrait = h >= w;
+const base = portrait ? [375, 667] : [667, 375];
+let k = Math.min(w / base[0], h / base[1]);
+k = Math.max(0.65, Math.min(k, 2.2));
+document.documentElement.style.setProperty('--k', k.toFixed(3));
+document.body.style.height = h + 'px';
+for (let i = 1; i <= PAD_COUNT; i++) adjustTextareaHeight(document.getElementById('desc-' + i));
+}
+window.addEventListener('resize', updateScale);
+window.addEventListener('orientationchange', () => setTimeout(updateScale, 150));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', updateScale);
+window.addEventListener('DOMContentLoaded', updateScale);
+
+let currentPage = 1;
+let isEditing = false;
+const audioBuffers = {};
+const activeSources = {};
+const padNames = {};
+const fadingSources = {}; // フェードアウト中の音（同じパッドをもう一度押したとき、すぐ消すために保持）
+const streams = {};      // 長い音源: 圧縮データのままストリーミング再生（メモリ小）
+const bufferMeta = {};   // 短い音源: デコード済みデータのサイズ・最終使用時刻
+const STREAM_THRESHOLD_SEC = 30;                // これより長い音源はストリーミング再生
+// 即応（メモリ展開）に使うメモリの上限。小さい画面の機種(iPhone SE 等)は控えめにする
+function getBudgetBytes() {
+if (typeof window.__FORCE_BUDGET === 'number') return window.__FORCE_BUDGET; // テスト用
+const v = localStorage.getItem('pad_data_global_budget') || 'auto';
+if (v !== 'auto' && !isNaN(parseInt(v, 10))) return parseInt(v, 10) * 1024 * 1024;
+const small = Math.min(screen.width, screen.height) <= 375;
+return (small ? 220 : 600) * 1024 * 1024;
+}
+let DECODED_BUDGET_BYTES = getBudgetBytes();
+let upgrading = false;
+const upgradeSkip = {};  // 今回は即応化しない音源（メモリ不足・失敗）
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx = new AudioContext();
+
+let db;
+const dbName = "SoundPadPro_Universal_Database_v15"
+const request = indexedDB.open(dbName, 1);
+
+function escapeHtml(t) {
+return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function makeFadeOptionsHtml(currentVal) {
+let html = `<option value="0" ${currentVal === "0" ? "selected" : ""}>0s</option>`;
+for(let sec = 0.5; sec <= 5.0; sec += 0.5) {
+const val = sec.toFixed(1);
+html += `<option value="${val}" ${currentVal === val ? "selected" : ""}>${val}s</option>`;
+}
+return html;
+}
+
+function getUniversalItem(keyName) {
+return localStorage.getItem(`pad_data_${keyName}`) || localStorage.getItem(`${keyName}_v13`) || ""
+}
+
+function showProgress(title, current, total, isError = false, overrideText = "") {
+const area = document.getElementById('progress-area');
+const bar = document.getElementById('progress-bar');
+const txt = document.getElementById('progress-text');
+const ttl = document.getElementById('progress-title');
+area.style.display = "block"
+document.getElementById('progress-action').style.display = "none";
+if(isError) { area.classList.add('error'); } else { area.classList.remove('error'); }
+ttl.innerText = title;
+if (overrideText !== "") {
+bar.style.width = "100%"
+txt.innerText = overrideText;
+return;
+}
+const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+bar.style.width = `${pct}%`;
+txt.innerText = `${current} / ${total} 件 (${pct}%)`;
+}
+
+function hideProgress() {
+document.getElementById('progress-area').style.display = "none"
+}
+
+request.onupgradeneeded = function(event) {
+db = event.target.result;
+if (!db.objectStoreNames.contains("sound_files")) db.createObjectStore("sound_files", { keyPath: "fileId" });
+if (!db.objectStoreNames.contains("pad_assignments")) db.createObjectStore("pad_assignments", { keyPath: "padKey" });
+};
+
+request.onsuccess = function(event) {
+db = event.target.result;
+document.getElementById('db-status').innerText = "ONLINE"
+loadSavedPadsForPage(currentPage);
+updatePageTitleDisplay();
+};
+
+request.onerror = function() {
+document.getElementById('db-status').innerText = "DB ERROR"
+};
+
+(function restoreGlobalFont() {
+const gf = localStorage.getItem('pad_data_global_font_size');
+const sel = document.getElementById('global-font-size');
+if (gf && sel && Array.from(sel.options).some(o => o.value === gf)) sel.value = gf;
+const bsel = document.getElementById('budget-select');
+const bv = localStorage.getItem('pad_data_global_budget');
+if (bsel && bv && Array.from(bsel.options).some(o => o.value === bv)) bsel.value = bv;
+})();
+
+// グリッド要素の初期生成
+const grid = document.getElementById('pad-grid');
+for (let i = 1; i <= PAD_COUNT; i++) {
+const pad = document.createElement('div');
+pad.className = 'pad';
+pad.id = `pad-${i}`;
+pad.setAttribute('onclick', `handlePadClick(${i}, event)`);
+grid.appendChild(pad);
+}
+
+function toggleEditMode() {
+isEditing = !isEditing;
+const btn = document.getElementById('lock-toggle-btn');
+if (isEditing) {
+document.body.classList.add('is-editing');
+btn.innerText = "✏️ 編集モード (設定可)"
+btn.classList.add('editing');
+} else {
+document.body.classList.remove('is-editing');
+btn.innerText = "▶ 本番モード"
+btn.classList.remove('editing');
+document.activeElement.blur();
+}
+renderPageUI();
+updatePageTitleDisplay();
+}
+
+function savePageTitle(text) {
+localStorage.setItem(`pad_data_page_title_${currentPage}`, text);
+}
+
+function updatePageTitleDisplay() {
+const titleInput = document.getElementById('page-title-display');
+const savedTitle = getUniversalItem(`page_title_${currentPage}`);
+titleInput.value = savedTitle;
+if (!isEditing && savedTitle === '') {
+titleInput.value = `ページ ${currentPage}`;
+}
+}
+
+function switchPage(pageNumber) {
+if (pageNumber === currentPage) return;
+document.getElementById(`p-btn-${currentPage}`).classList.remove('active');
+document.getElementById(`p-btn-${pageNumber}`).classList.add('active');
+currentPage = pageNumber;
+updatePageTitleDisplay();
+renderPageUI();
+loadSavedPadsForPage(currentPage);
+}
+
+function renderPageUI() {
+const globalFont = document.getElementById('global-font-size').value;
+
+for (let i = 1; i <= PAD_COUNT; i++) {
+const keySuffix = `${currentPage}_${i}`;
+const savedMode = getUniversalItem(`pad_mode_${keySuffix}`) || 'normal';
+const savedDesc = getUniversalItem(`pad_desc_${keySuffix}`);
+const savedFontSize = getUniversalItem(`pad_font_${keySuffix}`) || globalFont;
+const savedFI = getUniversalItem(`pad_fi_${keySuffix}`) || "0"
+const savedFO = getUniversalItem(`pad_fo_${keySuffix}`) || "1.0"
+
+const pad = document.getElementById('pad-' + i);
+const activeKey = `${currentPage}_${i}`;
+const hasSound = isReady(activeKey);
+if (activeSources[activeKey]) {
+pad.className = 'pad has-sound playing';
+} else {
+pad.className = hasSound ? 'pad has-sound' : 'pad';
+}
+if (streams[activeKey]) pad.classList.add('is-stream');
+if (isPinned(activeKey)) pad.classList.add('is-pinned');
+
+// 【iOS対応】accept属性にAACおよびM4Aの拡張子、MIMEタイプを明示的に指定
+pad.innerHTML = `
+<div class="pad-header">
+<span class="pad-num">#${i}</span>
+<select class="setting-btn edit-only" style="flex:none; width:42px; font-size:8px; padding:0;" onclick="event.stopPropagation();" onchange="setPadFontSize(${i}, this.value)" id="font-select-${i}">
+<option value="10px">10px</option>
+<option value="12px">12px</option>
+<option value="15px">15px</option>
+</select>
+<span class="mode-badge" id="mode-badge-${i}">${savedMode.toUpperCase()}</span>
+</div>
+<textarea class="pad-desc-textarea" id="desc-${i}" placeholder="${isEditing ? '[入力]' : ''}" rows="1" onclick="event.stopPropagation();" oninput="handleDescInput(${i}, this.value)" style="font-size: calc(${savedFontSize} * var(--k));" ${!isEditing ? 'readonly tabIndex="-1"' : ''}>${escapeHtml(savedDesc)}</textarea>
+<div class="pad-name" id="name-${i}">${escapeHtml(padNames[activeKey] || "")}</div>
+<div class="file-control-group edit-only">
+<label class="file-label" onclick="event.stopPropagation();" for="file-${i}">音源選択</label>
+<button class="pad-pin-btn ${isPinned(activeKey) ? 'on' : ''}" id="pin-btn-${i}" title="優先して即応にする" onclick="togglePin(${i}, event)">⚡</button>
+<button class="pad-delete-btn" id="del-btn-${i}" onclick="deleteSoundFromPad(${i}, event)">×</button>
+</div>
+<input type="file" class="file-input" id="file-${i}" onclick="event.stopPropagation();" onchange="handleFileSelect(${i}, event)">
+<div class="pad-fade-settings edit-only" onclick="event.stopPropagation();">
+<div class="fade-select-group"><span>In:</span><select id="fi-select-${i}" onchange="savePadFadeSettings(${i}, 'in', this.value)">${makeFadeOptionsHtml(savedFI)}</select></div>
+<div class="fade-select-group"><span>Out:</span><select id="fo-select-${i}" onchange="savePadFadeSettings(${i}, 'out', this.value)">${makeFadeOptionsHtml(savedFO)}</select></div>
+</div>
+
+<div class="pad-settings edit-only" onclick="event.stopPropagation();">
+<button class="setting-btn ${savedMode === 'normal' ? 'active' : ''}" id="btn-norm-${i}" onclick="setMode(${i}, 'normal')">通常</button>
+<button class="setting-btn ${savedMode === 'solo' ? 'active' : ''}" id="btn-solo-${i}" onclick="setMode(${i}, 'solo')">ソロ</button>
+<button class="setting-btn ${savedMode === 'loop' ? 'active' : ''}" id="btn-loop-${i}" onclick="setMode(${i}, 'loop')">ルプ</button>
+</div>
+`;
+if (isEditing) {
+document.getElementById(`font-select-${i}`).value = savedFontSize;
+if (hasSound) document.getElementById(`del-btn-${i}`).style.display = 'block';
+}
+setTimeout(() => { adjustTextareaHeight(document.getElementById(`desc-${i}`)); }, 0);
+}
+}
+
+function savePadFadeSettings(padId, type, val) {
+const keySuffix = `${currentPage}_${padId}`;
+localStorage.setItem(type === 'in' ? `pad_data_pad_fi_${keySuffix}` : `pad_data_pad_fo_${keySuffix}`, val);
+}
+
+function adjustTextareaHeight(el) {
+if (!el) return;
+el.style.height = 'auto';
+el.style.height = el.scrollHeight + 'px';
+}
+
+function handleDescInput(padId, text) {
+localStorage.setItem(`pad_data_pad_desc_${currentPage}_${padId}`, text);
+adjustTextareaHeight(document.getElementById(`desc-${padId}`));
+}
+
+function setPadFontSize(padId, size) {
+const el = document.getElementById(`desc-${padId}`);
+if(!el) return;
+el.style.fontSize = `calc(${size} * var(--k))`;
+localStorage.setItem(`pad_data_pad_font_${currentPage}_${padId}`, size);
+adjustTextareaHeight(el);
+}
+
+function changeAllFontSizes(size) {
+localStorage.setItem('pad_data_global_font_size', size);
+for (let i = 1; i <= PAD_COUNT; i++) {
+setPadFontSize(i, size);
+const selectEl = document.getElementById('font-select-' + i);
+if (selectEl) selectEl.value = size;
+}
+}
+
+function setMode(padId, mode) {
+const keySuffix = `${currentPage}_${padId}`;
+localStorage.setItem(`pad_data_pad_mode_${keySuffix}`, mode);
+document.getElementById(`btn-norm-${padId}`).classList.toggle('active', mode === 'normal');
+document.getElementById(`btn-solo-${padId}`).classList.toggle('active', mode === 'solo');
+document.getElementById(`btn-loop-${padId}`).classList.toggle('active', mode === 'loop');
+document.getElementById(`mode-badge-${padId}`).innerText = mode.toUpperCase();
+}
+
+function cleanSoundName(name) {
+let m = String(name).match(/^file_(.+?)_\d+(?:_\d{10,})?$/);
+if (m) return m[1];
+m = String(name).match(/^sha_([0-9a-f]{6})[0-9a-f]{58}$/);
+if (m) return '音源_' + m[1];
+return name;
+}
+
+function handleFileSelect(padId, event) {
+const file = event.target.files[0];
+if (!file) return;
+showProgress("音源ファイルを読み込み中...", 0, 100, false, "ファイルを展開しています...");
+document.getElementById(`name-${padId}`).innerText = "ロード中..."
+const reader = new FileReader();
+reader.onload = async function(e) {
+const padKey = `${currentPage}_${padId}`;
+const fileId = await makeFileId(file, e.target.result);
+saveSoundToPoolAndAssign(padKey, fileId, cleanSoundName(file.name), e.target.result);
+};
+reader.onerror = function() {
+showProgress("エラー", 0, 100, true, "ファイルを読み込めませんでした");
+renderPageUI();
+};
+reader.readAsArrayBuffer(file);
+}
+
+// 内容のハッシュで音源を識別（同じ内容は1つにまとめ、名前とサイズが同じ別ファイルは別物として扱う）
+async function makeFileId(file, arrayBuffer) {
+try {
+if (window.crypto && crypto.subtle) {
+const d = await crypto.subtle.digest('SHA-256', arrayBuffer);
+return 'sha_' + Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+} catch (e) {}
+return `file_${file.name}_${file.size}_${file.lastModified}`;
+}
+
+// どのパッドからも使われていない音源を削除（容量とバックアップサイズの肥大化防止）
+function gcSoundPool() {
+if (!db) return Promise.resolve();
+return new Promise(function(resolve) {
+const tx = db.transaction(["sound_files", "pad_assignments"], "readwrite");
+tx.oncomplete = tx.onabort = () => resolve();
+const used = new Set();
+tx.objectStore("pad_assignments").openCursor().onsuccess = function(e) {
+const c = e.target.result;
+if (c) { used.add(c.value.fileId); c.continue(); return; }
+const sf = tx.objectStore("sound_files");
+sf.openKeyCursor().onsuccess = function(e2) {
+const k = e2.target.result;
+if (!k) return;
+if (!used.has(k.key)) sf.delete(k.key);
+k.continue();
+};
+};
+});
+}
+
+function saveSoundToPoolAndAssign(padKey, fileId, fileName, arrayBuffer) {
+if (!db) return;
+showProgress("データベースへ保存中...", 50, 100, false, "IndexedDBへ書き込み中...");
+const transaction = db.transaction(["sound_files", "pad_assignments"], "readwrite");
+transaction.objectStore("sound_files").put({ fileId: fileId, name: fileName, buffer: arrayBuffer });
+transaction.objectStore("pad_assignments").put({ padKey: padKey, fileId: fileId, name: fileName });
+transaction.oncomplete = function() {
+processAudioBuffer(currentPage, parseInt(padKey.split('_')[1]), fileName, arrayBuffer, true);
+gcSoundPool();
+};
+transaction.onabort = function() {
+showProgress("エラー", 0, 100, true, "保存に失敗しました（端末の空き容量を確認してください）");
+renderPageUI();
+};
+}
+
+// ─── メモリ節約型の音源管理 ───
+// ・短い音源(30秒以下): 従来どおりデコードして再生（遅延が小さく、ループも途切れない）
+// ・長い音源(30秒超)  : デコードせず、圧縮データのまま <audio> でストリーミング再生
+//                       （3分のステレオ曲: デコードだと約65MB → ストリーミングなら約3MB）
+// ・表示中ページ以外の音源は、使っていなければメモリから解放する
+
+function isReady(key) { return !!audioBuffers[key] || !!streams[key]; }
+function touchSound(key) { if (bufferMeta[key]) bufferMeta[key].last = Date.now(); }
+
+function sniffAudioType(ab, name) {
+const u = new Uint8Array(ab, 0, Math.min(16, ab.byteLength));
+const tag = (from, to) => String.fromCharCode.apply(null, Array.from(u.slice(from, to)));
+const t4 = tag(0, 4);
+if (t4 === 'RIFF') return 'audio/wav';
+if (t4 === 'OggS') return 'audio/ogg';
+if (t4 === 'fLaC') return 'audio/flac';
+if (u.length >= 8 && tag(4, 8) === 'ftyp') return 'audio/mp4';
+if (t4.slice(0, 3) === 'ID3') return 'audio/mpeg';
+if (u[0] === 0xFF && (u[1] & 0xF0) === 0xF0 && ((u[1] >> 1) & 3) === 0) return 'audio/aac';
+if (u[0] === 0xFF && (u[1] & 0xE0) === 0xE0) return 'audio/mpeg';
+const ext = (String(name).match(/\.([A-Za-z0-9]{1,5})$/) || [])[1];
+const byExt = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', mp4: 'audio/mp4' };
+return (ext && byExt[ext.toLowerCase()]) || '';
+}
+
+function loadMediaElement(url) {
+return new Promise(resolve => {
+const el = new Audio();
+el.preload = 'auto';
+const timer = setTimeout(() => { el.onloadedmetadata = el.onerror = null; resolve(null); }, 6000);
+el.onloadedmetadata = () => { clearTimeout(timer); resolve(el); };
+el.onerror = () => { clearTimeout(timer); resolve(null); };
+el.src = url;
+});
+}
+
+function releaseStream(key) {
+const st = streams[key];
+if (!st) return;
+try { st.audio.pause(); } catch (e) {}
+try { st.srcNode.disconnect(); st.gain.disconnect(); } catch (e) {}
+try { st.audio.removeAttribute('src'); st.audio.load(); } catch (e) {}
+try { URL.revokeObjectURL(st.url); } catch (e) {}
+delete streams[key];
+}
+
+function releaseSound(key) {
+releaseStream(key);
+delete audioBuffers[key];
+delete bufferMeta[key];
+delete upgradeSkip[key];
+}
+
+// 表示中ページと再生中の音源は残し、それ以外を解放する
+function enforceCache() {
+const protect = key => key.startsWith(currentPage + '_') || !!activeSources[key];
+Object.keys(streams).forEach(k => { if (!protect(k)) { releaseStream(k); delete upgradeSkip[k]; } });
+let total = 0;
+Object.keys(audioBuffers).forEach(k => { total += (bufferMeta[k] ? bufferMeta[k].bytes : 0); });
+const candidates = Object.keys(audioBuffers).filter(k => !protect(k))
+.sort((x, y) => ((bufferMeta[x] || {}).last || 0) - ((bufferMeta[y] || {}).last || 0));
+for (const k of candidates) {
+if (total <= DECODED_BUDGET_BYTES) break;
+total -= (bufferMeta[k] ? bufferMeta[k].bytes : 0);
+delete audioBuffers[k];
+delete bufferMeta[k];
+}
+}
+
+// ─── 長い曲の「即応化」 ───
+// 長い曲は、まずストリーミングですぐ使える状態にし、そのあと裏で少しずつメモリ展開する。
+// 展開が終わったパッドは、短い音と同じく「押した瞬間に鳴る」ようになる（パッドの≋が消える）。
+// メモリ上限を超える分は、ストリーミングのまま残る。⚡を付けたパッドが優先。
+function isPinned(key) { return getUniversalItem(`pad_pin_${key}`) === '1'; }
+
+function togglePin(padId, event) {
+if (event) event.stopPropagation();
+const key = `${currentPage}_${padId}`;
+const now = !isPinned(key);
+localStorage.setItem(`pad_data_pad_pin_${key}`, now ? '1' : '0');
+delete upgradeSkip[key];
+const padEl = document.getElementById(`pad-${padId}`);
+if (padEl) padEl.classList.toggle('is-pinned', now);
+const btn = document.getElementById(`pin-btn-${padId}`);
+if (btn) btn.classList.toggle('on', now);
+if (now) runUpgrades();
+}
+
+function changeBudget(v) {
+localStorage.setItem('pad_data_global_budget', v);
+DECODED_BUDGET_BYTES = getBudgetBytes();
+Object.keys(upgradeSkip).forEach(k => delete upgradeSkip[k]);
+enforceCache();
+runUpgrades();
+}
+
+function decodedTotal() {
+let t = 0;
+Object.keys(audioBuffers).forEach(k => { t += (bufferMeta[k] ? bufferMeta[k].bytes : 0); });
+return t;
+}
+
+// 他ページ・非再生のデコード済みを古い順に外して、need バイトの空きを作る
+function makeRoom(need) {
+const protect = key => key.startsWith(currentPage + '_') || !!activeSources[key];
+let total = decodedTotal();
+if (total + need <= DECODED_BUDGET_BYTES) return true;
+const cands = Object.keys(audioBuffers).filter(k => !protect(k))
+.sort((x, y) => ((bufferMeta[x] || {}).last || 0) - ((bufferMeta[y] || {}).last || 0));
+for (const k of cands) {
+if (total + need <= DECODED_BUDGET_BYTES) break;
+total -= (bufferMeta[k] ? bufferMeta[k].bytes : 0);
+delete audioBuffers[k];
+delete bufferMeta[k];
+}
+return total + need <= DECODED_BUDGET_BYTES;
+}
+
+function pickNextUpgrade() {
+const list = [];
+for (let i = 1; i <= PAD_COUNT; i++) {
+const key = `${currentPage}_${i}`;
+const st = streams[key];
+if (st && !activeSources[key] && !upgradeSkip[key]) list.push({ key: key, padId: i, st: st, pinned: isPinned(key) });
+}
+list.sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || (a.padId - b.padId));
+return list[0] || null;
+}
+
+async function upgradeToBuffer(item) {
+const key = item.key, padId = item.padId, st = item.st;
+st.tries = (st.tries || 0) + 1;
+if (st.tries >= 2) upgradeSkip[key] = true; // 2回までしか試さない
+const need = Math.ceil(st.duration * audioCtx.sampleRate * 2 * 4); // 2ch 想定の概算（多めに見積もる）
+if (!makeRoom(need)) { upgradeSkip[key] = true; return; }
+try {
+const ab = await blobToArrayBuffer(st.blob);
+const buf = await decodeBuffer(ab);
+if (streams[key] !== st || activeSources[key]) return; // 状況が変わったので破棄
+const bytes = buf.length * buf.numberOfChannels * 4;
+if (!makeRoom(bytes)) { upgradeSkip[key] = true; return; }
+audioBuffers[key] = buf;
+bufferMeta[key] = { bytes: bytes, last: Date.now() };
+releaseStream(key);
+delete upgradeSkip[key];
+if (key.startsWith(currentPage + '_')) {
+const padEl = document.getElementById(`pad-${padId}`);
+if (padEl) padEl.classList.remove('is-stream');
+}
+} catch (e) {
+console.warn('即応化に失敗（ストリーミングのまま使います）', e);
+upgradeSkip[key] = true;
+}
+}
+
+async function runUpgrades() {
+if (upgrading || DECODED_BUDGET_BYTES <= 0) return;
+upgrading = true;
+try {
+for (let guard = 0; guard < 300; guard++) {
+const it = pickNextUpgrade();
+if (!it) break;
+await upgradeToBuffer(it);
+await new Promise(r => setTimeout(r, 150)); // 続けて重い処理をしない
+}
+} finally { upgrading = false; }
+}
+
+function decodeBuffer(ab) {
+return new Promise((resolve, reject) => {
+// コールバック形式と Promise 形式の両方が動く環境では、後者の拒否が未処理エラーになるのを防ぐ
+const p = audioCtx.decodeAudioData(ab, resolve, reject);
+if (p && typeof p.catch === 'function') p.catch(() => {});
+});
+}
+
+// 1つの音源を再生できる状態にする（長ければストリーミング、短ければデコード）
+async function prepareSound(page, padId, fileName, arrayBuffer) {
+const key = `${page}_${padId}`;
+releaseSound(key);
+let streamed = false;
+try {
+const type = sniffAudioType(arrayBuffer, fileName);
+const blob = new Blob([arrayBuffer], type ? { type: type } : {});
+const url = URL.createObjectURL(blob);
+const el = await loadMediaElement(url);
+if (el && isFinite(el.duration) && el.duration > STREAM_THRESHOLD_SEC) {
+const srcNode = audioCtx.createMediaElementSource(el);
+const gain = audioCtx.createGain();
+srcNode.connect(gain);
+gain.connect(audioCtx.destination);
+streams[key] = { audio: el, url: url, blob: blob, srcNode: srcNode, gain: gain, token: 0, duration: el.duration };
+streamed = true;
+} else {
+if (el) { el.removeAttribute('src'); el.load(); }
+URL.revokeObjectURL(url);
+}
+} catch (e) {
+console.warn('ストリーミング準備に失敗。デコード方式にします', e);
+releaseStream(key);
+}
+if (!streamed) {
+const buffer = await decodeBuffer(arrayBuffer); // 失敗したら呼び出し側で「解読不可」にする
+audioBuffers[key] = buffer;
+bufferMeta[key] = { bytes: buffer.length * buffer.numberOfChannels * 4, last: Date.now() };
+}
+padNames[key] = fileName;
+if (page === currentPage) {
+document.getElementById(`name-${padId}`).innerText = fileName;
+const padEl = document.getElementById(`pad-${padId}`);
+padEl.classList.add('has-sound');
+padEl.classList.toggle('is-stream', streamed);
+if (isEditing) document.getElementById(`del-btn-${padId}`).style.display = 'block';
+}
+}
+
+function processAudioBuffer(page, padId, fileName, arrayBuffer, shouldHideProgress = false) {
+if (audioCtx.state === 'suspended') audioCtx.resume();
+if (shouldHideProgress) {
+showProgress("オーディオ変換中...", 80, 100, false, "再生用に準備中...");
+}
+prepareSound(page, padId, fileName, arrayBuffer).then(() => {
+enforceCache();
+runUpgrades();
+if (shouldHideProgress) hideProgress();
+}).catch(err => {
+console.error(err);
+if (page === currentPage) document.getElementById(`name-${padId}`).innerText = "解読不可";
+if (shouldHideProgress) showProgress("エラー", 0, 100, true, "音源のデコードに失敗しました");
+});
+}
+
+function deleteSoundFromPad(padId, event) {
+event.stopPropagation();
+const padKey = `${currentPage}_${padId}`;
+if (!confirm(`#${padId} の音源登録を解除しますか？`)) return;
+
+if (activeSources[padKey]) fadeOutAndStop(currentPage, padId);
+releaseSound(padKey);
+delete padNames[padKey];
+
+if (db) {
+const transaction = db.transaction(["pad_assignments"], "readwrite");
+transaction.objectStore("pad_assignments").delete(padKey);
+transaction.oncomplete = gcSoundPool;
+}
+renderPageUI();
+}
+
+function idbGet(storeName, key) {
+return new Promise((resolve, reject) => {
+const tx = db.transaction([storeName], "readonly");
+const req = tx.objectStore(storeName).get(key);
+req.onsuccess = () => resolve(req.result);
+req.onerror = () => reject(req.error);
+});
+}
+
+let loadToken = 0;
+function loadSavedPadsForPage(page) {
+if (!db) return;
+renderPageUI();
+const myToken = ++loadToken;
+enforceCache(); // 先に他ページの不要なメモリを空ける
+
+(async function() {
+const assigns = await Promise.all(Array.from({ length: PAD_COUNT }, (_, i) => idbGet("pad_assignments", `${page}_${i + 1}`).catch(() => null)));
+const todo = [];
+assigns.forEach((a, i) => {
+const padId = i + 1, key = `${page}_${padId}`;
+if (!a) return;
+if (isReady(key)) {
+padNames[key] = a.name;
+touchSound(key);
+if (page === currentPage) {
+document.getElementById(`name-${padId}`).innerText = a.name;
+const padEl = document.getElementById(`pad-${padId}`);
+padEl.classList.add('has-sound');
+padEl.classList.toggle('is-stream', !!streams[key]);
+}
+} else {
+todo.push({ padId: padId, a: a });
+}
+});
+if (todo.length === 0) { runUpgrades(); return; }
+
+showProgress("ストレージから音源を読込中...", 0, todo.length);
+for (let n = 0; n < todo.length; n++) {
+if (myToken !== loadToken) return; // 別のページに切り替わったら中断
+const item = todo[n];
+try {
+const rec = await idbGet("sound_files", item.a.fileId);
+if (rec && rec.buffer) {
+if (audioCtx.state === 'suspended') audioCtx.resume();
+await prepareSound(page, item.padId, item.a.name, rec.buffer);
+}
+} catch (err) {
+console.error(err);
+if (page === currentPage) document.getElementById(`name-${item.padId}`).innerText = "解読不可";
+}
+if (myToken === loadToken) showProgress("ストレージから音源を読込中...", n + 1, todo.length);
+}
+if (myToken === loadToken) { hideProgress(); enforceCache(); runUpgrades(); }
+})();
+}
+
+// ─── パッドロック（ロック中はパッドを触っても反応しない） ───
+let padLocked = false;
+function togglePadLock() {
+padLocked = !padLocked;
+document.body.classList.toggle('pad-locked', padLocked);
+const btn = document.getElementById('pad-lock-btn');
+btn.classList.toggle('locked', padLocked);
+btn.innerText = padLocked ? '🔒 ロック中' : '🔓 ロック';
+}
+
+// ─── 音声再生ロジック ───
+function handlePadClick(padId, event) {
+if (padLocked) return;
+if (audioCtx.state === 'suspended') audioCtx.resume();
+const currentKey = `${currentPage}_${padId}`;
+
+if (activeSources[currentKey]) {
+fadeOutAndStop(currentPage, padId);
+return;
+}
+
+const buffer = audioBuffers[currentKey];
+const stream = streams[currentKey];
+if (!buffer && !stream) return;
+
+const savedMode = getUniversalItem(`pad_mode_${currentKey}`) || 'normal';
+if (savedMode === 'solo' || hasActiveSolo()) stopAllSounds();
+touchSound(currentKey);
+
+cutFadingSound(currentKey);
+if (stream) { startStream(currentKey, padId, savedMode); return; }
+
+const source = audioCtx.createBufferSource();
+source.buffer = buffer;
+if (savedMode === 'loop') source.loop = true;
+
+const gainNode = audioCtx.createGain();
+const fadeInTime = parseFloat(getUniversalItem(`pad_fi_${currentKey}`) || "0");
+if (fadeInTime > 0) {
+gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+gainNode.gain.linearRampToValueAtTime(1, audioCtx.currentTime + fadeInTime);
+} else {
+gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+}
+
+source.connect(gainNode);
+gainNode.connect(audioCtx.destination);
+source.start(0);
+
+activeSources[currentKey] = { source, gainNode, mode: savedMode };
+document.getElementById(`pad-${padId}`).classList.add('playing');
+
+if (savedMode !== 'loop') {
+source.onended = () => {
+if (activeSources[currentKey] && activeSources[currentKey].source === source) {
+delete activeSources[currentKey];
+const padEl = document.getElementById(`pad-${padId}`);
+if (padEl) padEl.classList.remove('playing');
+}
+};
+}
+}
+
+// ストリーミング再生（長い音源）。フェードは WebAudio のゲインで行う
+// ・通常（止まっていて先頭にいる）: 待たずにすぐ再生を始める
+// ・フェードアウト中・再生中の押し直し: 前回の音が一瞬漏れないよう、先頭に戻って再生が始まってから音量を上げる
+function startStream(key, padId, mode) {
+const st = streams[key];
+const a = st.audio;
+const token = ++st.token; // 再トリガー時、前回のフェードアウト後の停止が今回の再生を止めないようにする
+const fadeInTime = parseFloat(getUniversalItem(`pad_fi_${key}`) || "0");
+const g = st.gain.gain;
+const rampTo = (when) => {
+g.cancelScheduledValues(when);
+g.setValueAtTime(0, when);
+g.linearRampToValueAtTime(1, when + (fadeInTime > 0 ? fadeInTime : 0.004));
+};
+
+const atRest = a.paused && !a.seeking && a.currentTime < 0.05;
+const t = audioCtx.currentTime;
+g.cancelScheduledValues(t);
+if (atRest) {
+// すぐ鳴らす: 音量は即座に設定（フェードインがあればそのとおりに）
+if (fadeInTime > 0) { g.setValueAtTime(0, t); g.linearRampToValueAtTime(1, t + fadeInTime); }
+else g.setValueAtTime(1, t);
+} else {
+g.setValueAtTime(0, t); // 前回の音の残りを出さない
+}
+
+a.loop = (mode === 'loop');
+const shim = {
+onended: null,
+stop() { if (st.token === token) { try { a.pause(); a.currentTime = 0; } catch (e) {} } }
+};
+const alive = () => st.token === token && activeSources[key] && activeSources[key].source === shim;
+const clearPlaying = () => {
+if (activeSources[key] && activeSources[key].source === shim) {
+delete activeSources[key];
+const padEl = document.getElementById(`pad-${padId}`);
+if (padEl && key.startsWith(currentPage + '_')) padEl.classList.remove('playing');
+}
+};
+a.onended = () => { if (st.token === token && mode !== 'loop') clearPlaying(); };
+activeSources[key] = { source: shim, gainNode: st.gain, mode: mode, stream: true };
+document.getElementById(`pad-${padId}`).classList.add('playing');
+
+if (!atRest) {
+try { a.pause(); } catch (e) {}
+try { a.currentTime = 0; } catch (e) {}
+}
+
+let opened = atRest;
+const openGain = () => {
+if (opened || !alive()) return;
+if (a.seeking) { setTimeout(openGain, 10); return; } // 頭出しが終わるまで待つ
+opened = true;
+rampTo(audioCtx.currentTime);
+};
+const p = a.play(); // iOS の仕様で、タップの処理の中で直接呼ぶ
+if (p && p.then) {
+p.then(openGain).catch(err => { console.error('ストリーミング再生に失敗', err); clearPlaying(); });
+}
+if (!atRest) {
+// 念のため: 再生開始の通知が来なくても、無音のままにならないようにする
+setTimeout(() => { if (alive() && !opened) { opened = true; rampTo(audioCtx.currentTime); } }, 700);
+}
+}
+
+// 同じパッドをもう一度押したとき、前回のフェードアウトの音が新しい音に重なって鳴らないよう、素早く消す
+function cutFadingSound(key) {
+const f = fadingSources[key];
+if (!f) return;
+delete fadingSources[key];
+if (f.isStream) return; // ストリーミングは startStream が音量0から始めるので不要
+try {
+const now = audioCtx.currentTime;
+f.gainNode.gain.cancelScheduledValues(now);
+f.gainNode.gain.setValueAtTime(f.gainNode.gain.value, now);
+f.gainNode.gain.linearRampToValueAtTime(0, now + 0.015);
+f.source.stop(now + 0.02);
+} catch (e) {}
+}
+
+function hasActiveSolo() {
+return Object.values(activeSources).some(src => src.mode === 'solo');
+}
+
+function fadeOutAndStop(page, padId) {
+const targetKey = `${page}_${padId}`;
+const active = activeSources[targetKey];
+if (!active) return;
+
+const fadeOutTime = parseFloat(getUniversalItem(`pad_fo_${targetKey}`) || "1.0");
+const gainNode = active.gainNode;
+const source = active.source;
+delete activeSources[targetKey];
+if (page === currentPage) document.getElementById(`pad-${padId}`).classList.remove('playing');
+
+if (fadeOutTime > 0) {
+gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeOutTime);
+const fadeRec = { source: source, gainNode: gainNode, isStream: !!active.stream };
+fadingSources[targetKey] = fadeRec;
+setTimeout(() => {
+try { source.stop(); } catch(e) {}
+if (fadingSources[targetKey] === fadeRec) delete fadingSources[targetKey];
+}, fadeOutTime * 1000);
+} else {
+try { source.stop(); } catch(e) {}
+}
+}
+
+function stopAllSounds() {
+Object.keys(activeSources).forEach(key => {
+const parts = key.split('_');
+fadeOutAndStop(parseInt(parts[0]), parseInt(parts[1]));
+});
+}
+
+// ─── バックアップ機能 (ZIP) ───
+let pendingBackup = null;
+
+// ページ N の設定キーか判定
+function pageSettingKey(key, page) {
+return new RegExp(`^pad_data_(page_title_${page}|pad_(mode|desc|font|fi|fo|pin)_${page}_\\d+)$`).test(key);
+}
+function getBackupScope() {
+const v = document.getElementById('backup-scope').value;
+return v === 'all' ? null : parseInt(v, 10);
+}
+
+function backupStamp() {
+const d = new Date();
+const p = n => String(n).padStart(2, '0');
+return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+function exportBackupZip() {
+if (!db) return;
+pendingBackup = null;
+const scopePage = getBackupScope();
+showProgress("バックアップ作成中...", 0, 100, false, "構成ファイルを準備中...");
+const fail = (err) => {
+console.error(err);
+showProgress("エラー", 0, 100, true, "バックアップの作成に失敗しました");
+};
+try {
+const zip = new JSZip();
+const settingsMap = {};
+for (let i = 0; i < localStorage.length; i++) {
+const key = localStorage.key(i);
+if (key && key.startsWith('pad_data_') && (scopePage === null || pageSettingKey(key, scopePage))) settingsMap[key] = localStorage.getItem(key);
+}
+const tx = db.transaction(["sound_files", "pad_assignments"], "readonly");
+tx.onabort = () => fail(tx.error);
+tx.objectStore("pad_assignments").getAll().onsuccess = function(e) {
+const assignments = e.target.result.filter(a => scopePage === null || String(a.padKey).startsWith(scopePage + '_'));
+const used = new Set(assignments.map(a => a.fileId));
+tx.objectStore("sound_files").getAll().onsuccess = function(fe) {
+// 割り当てのない音源（削除済みのゴミデータ）は含めない
+const files = fe.target.result.filter(f => used.has(f.fileId));
+// ZIP内の音源は「P1-03_曲名.mp3」のように、ページ・パッド番号と元の曲名を付けて保存
+// （ZIPを解凍して、音源選択から手動で選び直すときに分かりやすくするため）
+const sorted = assignments.slice().sort((a, b) => {
+const pa = String(a.padKey).split('_').map(Number), pb = String(b.padKey).split('_').map(Number);
+return (pa[0] - pb[0]) || (pa[1] - pb[1]);
+});
+const firstUse = {};
+sorted.forEach(a => { if (!(a.fileId in firstUse)) firstUse[a.fileId] = a; });
+const filesMap = {};
+const usedEntries = new Set();
+files.forEach((f, i) => {
+const a = firstUse[f.fileId];
+const orig = (a && a.name) || f.name || 'sound';
+const m = String(orig).match(/^(.*?)(\.[A-Za-z0-9]{1,5})?$/);
+const base = m[1].replace(/[\\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 80) || 'sound';
+const ext = m[2] || '';
+let prefix = 'S' + String(i + 1).padStart(3, '0');
+if (a) { const pp = String(a.padKey).split('_'); prefix = `P${pp[0]}-${String(pp[1]).padStart(2, '0')}`; }
+let entry = `sounds/${prefix}_${base}${ext}`;
+let n = 2;
+while (usedEntries.has(entry)) entry = `sounds/${prefix}_${base}(${n++})${ext}`;
+usedEntries.add(entry);
+filesMap[f.fileId] = entry;
+zip.file(entry, f.buffer, { binary: true });
+});
+zip.file("config.json", JSON.stringify({ version: 3, scope: scopePage === null ? 'all' : scopePage, settings: settingsMap, assignments: assignments, files: filesMap }));
+zip.generateAsync({ type: "blob", compression: "STORE" }, function(meta) {
+showProgress("ZIPパッケージ作成中...", Math.round(meta.percent), 100);
+}).then(function(blob) {
+pendingBackup = { blob: blob, name: `Cuezy_Backup_${scopePage === null ? '' : 'Page' + scopePage + '_'}${backupStamp()}.zip` };
+showBackupReady(files.length, scopePage);
+}).catch(fail);
+};
+};
+} catch (err) { fail(err); }
+}
+
+// 作成完了後、もう一度ボタンを押してもらって保存する（iOSは直前のタップが必要なため）
+function showBackupReady(count, scopePage) {
+showProgress((scopePage === null ? "バックアップ完成" : "ページ" + scopePage + "のバックアップ完成") + "（音源 " + count + " 件）", 100, 100, false, "下のボタンで保存してください");
+const btn = document.getElementById('progress-action');
+btn.innerText = "💾 保存 / 共有";
+btn.onclick = saveBackupFile;
+btn.style.display = "block";
+}
+
+async function saveBackupFile() {
+if (!pendingBackup) return;
+const { blob, name } = pendingBackup;
+const file = new File([blob], name, { type: "application/zip" });
+if (navigator.canShare && navigator.canShare({ files: [file] })) {
+try {
+await navigator.share({ files: [file], title: name });
+pendingBackup = null; hideProgress();
+return;
+} catch (e) {
+if (e && e.name === 'AbortError') return; // 共有画面を閉じただけ。ボタンは残す
+}
+}
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = name;
+document.body.appendChild(a);
+a.click();
+a.remove();
+setTimeout(() => URL.revokeObjectURL(url), 60000);
+pendingBackup = null;
+hideProgress();
+}
+
+// ─── ZIPを丸ごとメモリに載せずに読む（ファイルの必要な部分だけを順に読む） ───
+// 書き出したZIPは無圧縮(STORE)なので、目次を読んで、各音源の位置を直接たどれる。
+// 読めない形式（ZIP64・未対応の圧縮など）のときだけ、従来の JSZip（丸ごと読み込み）に切り替える。
+function blobToArrayBuffer(blob) {
+if (blob.arrayBuffer) return blob.arrayBuffer();
+return new Promise((resolve, reject) => {
+const r = new FileReader();
+r.onload = () => resolve(r.result);
+r.onerror = () => reject(r.error);
+r.readAsArrayBuffer(blob);
+});
+}
+
+async function readZipIndex(file) {
+const tailLen = Math.min(file.size, 65557);
+const tail = new DataView(await blobToArrayBuffer(file.slice(file.size - tailLen)));
+let p = -1;
+for (let i = tail.byteLength - 22; i >= 0; i--) {
+if (tail.getUint32(i, true) === 0x06054b50) { p = i; break; }
+}
+if (p < 0) throw new Error('NOT_ZIP');
+const total = tail.getUint16(p + 10, true);
+const cdSize = tail.getUint32(p + 12, true);
+const cdOff = tail.getUint32(p + 16, true);
+if (total === 0xFFFF || cdSize === 0xFFFFFFFF || cdOff === 0xFFFFFFFF) throw new Error('ZIP64');
+const cd = new DataView(await blobToArrayBuffer(file.slice(cdOff, cdOff + cdSize)));
+const decoder = new TextDecoder('utf-8');
+const entries = [];
+let o = 0;
+for (let i = 0; i < total; i++) {
+if (cd.getUint32(o, true) !== 0x02014b50) throw new Error('BAD_DIRECTORY');
+const flags = cd.getUint16(o + 8, true);
+const method = cd.getUint16(o + 10, true);
+const comp = cd.getUint32(o + 20, true);
+const size = cd.getUint32(o + 24, true);
+const nl = cd.getUint16(o + 28, true);
+const el = cd.getUint16(o + 30, true);
+const cl = cd.getUint16(o + 32, true);
+const off = cd.getUint32(o + 42, true);
+if (comp === 0xFFFFFFFF || size === 0xFFFFFFFF || off === 0xFFFFFFFF) throw new Error('ZIP64');
+const name = decoder.decode(new Uint8Array(cd.buffer, cd.byteOffset + o + 46, nl));
+entries.push({ name: name, flags: flags, method: method, comp: comp, size: size, off: off });
+o += 46 + nl + el + cl;
+}
+if (entries.some(e => (e.flags & 1) || (e.method !== 0 && !(e.method === 8 && typeof DecompressionStream !== 'undefined')))) {
+throw new Error('UNSUPPORTED_ZIP');
+}
+return entries;
+}
+
+async function readZipEntry(file, e) {
+const lh = new DataView(await blobToArrayBuffer(file.slice(e.off, e.off + 30)));
+if (lh.getUint32(0, true) !== 0x04034b50) throw new Error('BAD_LOCAL_HEADER');
+const start = e.off + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+const blob = file.slice(start, start + e.comp);
+if (e.method === 0) return blobToArrayBuffer(blob);
+const ds = new DecompressionStream('deflate-raw');
+return new Response(blob.stream().pipeThrough(ds)).arrayBuffer();
+}
+
+// JSZip と同じ使い方（file(名前) / file(正規表現)）ができる読み取り用の窓口
+function makeStreamingZip(file, entries) {
+const map = {};
+entries.forEach(e => {
+map[e.name] = {
+name: e.name,
+dir: e.name.endsWith('/'),
+async: async function(type) {
+const ab = await readZipEntry(file, e);
+return type === 'text' ? new TextDecoder('utf-8').decode(ab) : ab;
+}
+};
+});
+return {
+file: function(arg) {
+if (typeof arg === 'string') return map[arg] || null;
+return Object.keys(map).filter(n => arg.test(n) && !map[n].dir).map(n => map[n]);
+}
+};
+}
+
+async function openBackupZip(file) {
+try {
+return makeStreamingZip(file, await readZipIndex(file));
+} catch (e) {
+console.warn('ストリーミング読込を使えないため、従来の方法で読み込みます', e && e.message);
+return JSZip.loadAsync(file);
+}
+}
+
+function importBackupFile(event) {
+const input = event.target;
+const file = input.files[0];
+input.value = ''; // 同じファイルをもう一度選べるようにする
+if (!file) return;
+if (!db) return;
+
+showProgress("インポート展開中...", 10, 100, false, "ZIPの目次を読み込み中... (" + Math.round(file.size / 1048576) + "MB)");
+const fail = (msg, err) => {
+if (err) console.error(err);
+showProgress("エラー", 0, 100, true, msg + "（現在のデータは変更されていません）");
+};
+
+openBackupZip(file).then(async function(contents) {
+const cfgFile = contents.file("config.json");
+if (!cfgFile) throw new Error("NO_CONFIG");
+const pkg = JSON.parse(await cfgFile.async("text"));
+if (!pkg || !Array.isArray(pkg.assignments)) throw new Error("BAD_CONFIG");
+const settings = (pkg.settings && typeof pkg.settings === 'object') ? pkg.settings : {};
+
+// 全ページ用か、ページ別バックアップか
+const scopePage = (Number.isInteger(pkg.scope) && pkg.scope >= 1 && pkg.scope <= 5) ? pkg.scope : null;
+const msg = scopePage === null
+? "全データを上書き復元しますか？\n（現在の音源と設定はすべて置き換わります）"
+: `ページ${scopePage}のバックアップです。\nページ${scopePage}だけを上書き復元しますか？\n（他のページは変わりません）`;
+if (!confirm(msg)) { hideProgress(); return; }
+
+// ① 音源を1つずつ取り出して、すぐデータベースへ保存する（全部をメモリに載せない）
+const nameById = {};
+pkg.assignments.forEach(a => { if (!(a.fileId in nameById)) nameById[a.fileId] = a.name; });
+const inScope = a => scopePage === null || String(a.padKey).startsWith(scopePage + '_');
+const target = pkg.assignments.filter(inScope);
+const neededIds = new Set(target.map(a => a.fileId));
+
+// fileId → ZIP内のファイル の対応表（新形式は config.files、旧形式は sounds/<fileId>）
+const entryOf = {};
+if (pkg.files && typeof pkg.files === 'object') {
+Object.keys(pkg.files).forEach(id => { const z = contents.file(pkg.files[id]); if (z && !z.dir) entryOf[id] = z; });
+}
+contents.file(/^sounds\//).forEach(z => {
+if (z.dir) return;
+const id = z.name.slice("sounds/".length);
+if (!(id in entryOf)) entryOf[id] = z;
+});
+const loadIds = Object.keys(entryOf).filter(id => scopePage === null || neededIds.has(id));
+const present = new Set();
+for (let i = 0; i < loadIds.length; i++) {
+const id = loadIds[i];
+const buf = await entryOf[id].async("arraybuffer");
+await new Promise((resolve, reject) => {
+const tx = db.transaction(["sound_files"], "readwrite");
+tx.oncomplete = resolve;
+tx.onabort = () => reject(tx.error || new Error("ABORT"));
+tx.objectStore("sound_files").put({ fileId: id, name: nameById[id] || "Restored", buffer: buf });
+});
+present.add(id);
+showProgress("音源データを保存中...", i + 1, loadIds.length);
+}
+const assignments = target.filter(a => present.has(a.fileId));
+const missing = target.length - assignments.length;
+
+// ② 割り当て（どのパッドにどの音源か）を1回のトランザクションで入れ替える
+showProgress("データベースを更新中...", 95, 100, false, "割り当てを更新中...");
+await new Promise((resolve, reject) => {
+const tx = db.transaction(["pad_assignments"], "readwrite");
+tx.oncomplete = resolve;
+tx.onabort = () => reject(tx.error || new Error("ABORT"));
+const pa = tx.objectStore("pad_assignments");
+if (scopePage === null) {
+pa.clear();
+} else {
+for (let i = 1; i <= PAD_COUNT; i++) pa.delete(`${scopePage}_${i}`);
+}
+assignments.forEach(a => pa.put(a));
+});
+await gcSoundPool(); // 使われなくなった古い音源を整理
+
+// ③ 設定を復元（対象範囲の既存設定は先に消して、バックアップの内容と一致させる）
+const inSettingsScope = k => k.startsWith('pad_data_') && (scopePage === null || pageSettingKey(k, scopePage));
+const oldKeys = [];
+for (let i = 0; i < localStorage.length; i++) {
+const k = localStorage.key(i);
+if (k && inSettingsScope(k)) oldKeys.push(k);
+}
+oldKeys.forEach(k => localStorage.removeItem(k));
+Object.keys(settings).forEach(k => {
+if (inSettingsScope(k)) localStorage.setItem(k, String(settings[k]));
+});
+
+showProgress("完了", 100, 100, false, "アプリをリロードします...");
+setTimeout(() => {
+alert("復元が完了しました！" + (missing > 0 ? `\n（音源が見つからなかった ${missing} 件は復元されていません）` : ""));
+location.reload();
+}, 500);
+}).catch(function(err) {
+gcSoundPool(); // 途中まで保存した音源があれば片付ける
+const m = err && err.message;
+if (m === "NO_CONFIG" || m === "BAD_CONFIG") fail("Cuezy のバックアップファイルではありません", err);
+else if (err && err.name === "QuotaExceededError") fail("端末の空き容量が足りません", err);
+else fail("ZIPファイルの読み込みに失敗しました", err);
+});
+}
+
+// ─── PWA: オフライン対応 ───
+if ('serviceWorker' in navigator) {
+window.addEventListener('load', () => {
+navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW登録失敗', err));
+});
+}
+// ストレージの自動削除をできるだけ防ぐ（対応ブラウザのみ）
+if (navigator.storage && navigator.storage.persist) {
+navigator.storage.persist().catch(() => {});
+}
+</script>
+</body>
+</html>
