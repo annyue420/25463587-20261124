@@ -1,6 +1,6 @@
 // Cuezy Service Worker
 // アプリを更新したら CACHE_VERSION の数字を上げてください（古いキャッシュが入れ替わります）
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const CACHE_NAME = `cuezy-${CACHE_VERSION}`;
 const APP_SHELL = [
   './',
